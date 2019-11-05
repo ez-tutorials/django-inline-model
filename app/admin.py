@@ -73,16 +73,13 @@ admin.site.register(Part, PartAdmin)
 class ComponentInline(admin.TabularInline):
     model = Component
     extra = 1
+
     # list_field = ['part', 'warehouse', 'quantity']
 
     # def formfield_for_foreignkey(self, db_field, request, **kwargs):
     #     if db_field.name == "warehouse":
     #         kwargs["queryset"] = Part.objects.filter(warehouse=db_field.value)
     #     return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    def formfield_for_choice_field(self, db_field, request, **kwargs):
-        return super().formfield_for_choice_field(db_field, request, **kwargs)
-
 
 class ProductAdmin(admin.ModelAdmin):
     inlines = [
@@ -98,3 +95,7 @@ class WarehouseAdmin(admin.ModelAdmin):
 admin.site.register(Warehouse, WarehouseAdmin)
 
 
+class ComponentAdmin(admin.ModelAdmin):
+    pass
+
+admin.site.register(Component, ComponentAdmin)

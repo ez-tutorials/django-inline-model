@@ -1,4 +1,5 @@
 from django.db import models
+from smart_selects.db_fields import GroupedForeignKey, ChainedForeignKey
 
 # Create your models here.
 
@@ -76,9 +77,20 @@ class Part(models.Model):
 
 
 class Component(models.Model):
-   product = models.ForeignKey(Product, on_delete=models.CASCADE)
-   warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='component_warehouse')
-   part = models.ForeignKey(Part, on_delete=models.CASCADE, related_name='component_part')
-   quantity = models.IntegerField()
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='warehouse')
+    # grouped_part = GroupedForeignKey(Part, 'warehouse')
+    part = ChainedForeignKey(
+        Part,
+        chained_field="warehouse",
+        chained_model_field="warehouse",
+        show_all=True,
+        auto_choose=True,
+        sort=True
+    )
+    quantity = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.product} in {self.warehouse}"
 
 
