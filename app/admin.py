@@ -3,9 +3,13 @@ from django.contrib import admin
 # Register your models here.
 from .models import Group, Membership, Person
 from .models import Role, Movie, Artist
-from .models import Component, Product, Part
+from .models import Book, Author
+from .models import Part, Product, Warehouse, Component
 
 from django.contrib import admin
+from django_admin_listfilter_dropdown.filters import DropdownFilter, RelatedDropdownFilter, ChoiceDropdownFilter
+
+
 
 
 class CustomModelAdmin(object):
@@ -49,19 +53,48 @@ admin.site.register(Artist, ArtistAdmin)
 admin.site.register(Role)
 
 
-class ComponentInline(admin.TabularInline):
-    model = Component
+class BookInline(admin.TabularInline):
+    model = Book
     extra = 1
 
 
-class ProductAdmin(admin.ModelAdmin):
-    inlines = (ComponentInline,)
+class AuthorAdmin(admin.ModelAdmin):
+    inlines = [
+        BookInline,
+    ]
+admin.site.register(Author, AuthorAdmin)
 
 
 class PartAdmin(admin.ModelAdmin):
-    inlines = (ComponentInline,)
+    pass
+admin.site.register(Part, PartAdmin)
 
+
+class ComponentInline(admin.TabularInline):
+    model = Component
+    extra = 1
+    # list_field = ['part', 'warehouse', 'quantity']
+
+    # def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    #     if db_field.name == "warehouse":
+    #         kwargs["queryset"] = Part.objects.filter(warehouse=db_field.value)
+    #     return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_choice_field(self, db_field, request, **kwargs):
+        return super().formfield_for_choice_field(db_field, request, **kwargs)
+
+
+class ProductAdmin(admin.ModelAdmin):
+    inlines = [
+        ComponentInline,
+    ]
 
 admin.site.register(Product, ProductAdmin)
-admin.site.register(Part, PartAdmin)
-admin.site.register(Component)
+
+
+class WarehouseAdmin(admin.ModelAdmin):
+    pass
+
+admin.site.register(Warehouse, WarehouseAdmin)
+
+

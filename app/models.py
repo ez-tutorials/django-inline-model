@@ -45,20 +45,40 @@ class Role(models.Model):
 
 
 
+class Author(models.Model):
+   name = models.CharField(max_length=100)
 
-class Part(models.Model):
-    name = models.CharField(max_length=100)
+class Book(models.Model):
+   author = models.ForeignKey(Author, on_delete=models.CASCADE)
+   title = models.CharField(max_length=100)
 
 
-class Component(models.Model):
-    name = models.CharField(max_length=100)
-    part = models.ForeignKey(Part, on_delete=models.DO_NOTHING)
-    part_quantity = models.IntegerField()
+class Warehouse(models.Model):
+   name = models.CharField(max_length=100)
+
+   def __str__(self):
+       return f"{self.name}"
 
 
 class Product(models.Model):
-    name = models.CharField(max_length=100)
-    component = models.ManyToManyField(Component, related_name='component')
+   name = models.CharField(max_length=100)
 
+   def __str__(self):
+       return f"{self.name}"
+
+
+class Part(models.Model):
+    name = models.CharField(max_length=100)
+    warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"{self.name} in {self.warehouse}"
+
+
+class Component(models.Model):
+   product = models.ForeignKey(Product, on_delete=models.CASCADE)
+   warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='component_warehouse')
+   part = models.ForeignKey(Part, on_delete=models.CASCADE, related_name='component_part')
+   quantity = models.IntegerField()
 
 

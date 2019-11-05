@@ -1,2 +1,4 @@
-Django==2.1.11
-pytz==2018.9
+Django==2.2.7
+django-admin-list-filter-dropdown==1.0.3
+pytz==2019.3
+sqlparse==0.3.0
