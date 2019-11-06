@@ -1,4 +1,3 @@
-from django.contrib import admin
 from django.contrib import messages
 
 # Register your models here.
@@ -44,9 +43,9 @@ class PersonAdmin(admin.ModelAdmin):
 admin.site.register(Person, PersonAdmin)
 
 
-
 class PartAdmin(admin.ModelAdmin):
-    pass
+    list_display = ['name', 'batch', 'warehouse', 'available_total']
+
 admin.site.register(Part, PartAdmin)
 
 
@@ -60,6 +59,8 @@ class ProductAdmin(admin.ModelAdmin):
         ComponentInline,
     ]
 
+    list_display = ['name', 'warehouse']
+
 
 admin.site.register(Product, ProductAdmin)
 
@@ -69,13 +70,6 @@ class WarehouseAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Warehouse, WarehouseAdmin)
-
-
-# class ComponentAdmin(admin.ModelAdmin):
-#     pass
-#
-# admin.site.register(Component, ComponentAdmin)
-
 
 
 class OrderedItemAdmin(admin.ModelAdmin):
@@ -94,22 +88,23 @@ class OrderAdmin(admin.ModelAdmin):
     inlines = [
         OrderItemInline,
     ]
+    list_display = ['order_name', 'order_number', 'client', 'delivered_by']
 
-    def save_formset(self, request, form, formset, change):
-        # formset has to be saved to get correct queryset
-        formset.save()
-        # Update part status and quantity available here
-        ordered_items = [f if f.quantity != 0 else f for f in formset.queryset]
-        for item in ordered_items:
-            quantity = item.quantity
-            product = item.product
-            # Update part total available quantity if all part check passes
-        # messages.add_message(request, messages.ERROR, 'Car has been sold')
-        super().save_formset(request, form, formset, change)
-
-    def save_model(self, request, obj, form, change):
-        # Update order status
-        obj.user = request.user
-        super().save_model(request, obj, form, change)
+    # def save_formset(self, request, form, formset, change):
+    #     # formset has to be saved to get correct queryset
+    #     formset.save()
+    #     # Update part status and quantity available here
+    #     ordered_items = [f if f.quantity != 0 else f for f in formset.queryset]
+    #     for item in ordered_items:
+    #         quantity = item.quantity
+    #         product = item.product
+    #         # Update part total available quantity if all part check passes
+    #     # messages.add_message(request, messages.ERROR, 'Car has been sold')
+    #     super().save_formset(request, form, formset, change)
+    #
+    # def save_model(self, request, obj, form, change):
+    #     # Update order status
+    #     obj.user = request.user
+    #     super().save_model(request, obj, form, change)
 
 admin.site.register(Order, OrderAdmin)

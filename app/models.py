@@ -1,4 +1,6 @@
 from django.db import models
+from django.contrib import messages
+
 from smart_selects.db_fields import GroupedForeignKey, ChainedForeignKey
 
 # Create your models here.
@@ -110,6 +112,12 @@ class Batch(models.Model):
 
 class Product(models.Model):
     name = models.CharField(max_length=100)
+    default_warehouse, _ = Warehouse.objects.get_or_create(name="Cape Town")
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.CASCADE,
+        default=default_warehouse.id
+    )
 
     def __str__(self):
         return f"{self.name}"
@@ -122,15 +130,13 @@ class Part(models.Model):
     available_total = models.IntegerField(default=0)
 
     def __str__(self):
-        return f"{self.name} - {self.batch.number} stored in " \
+        return f"{self.name} [{self.batch.number}] stored in " \
                f"{self.warehouse}, {self.available_total} available."
 
 
 class Component(models.Model):
     product = models.ForeignKey(Product, on_delete=models.DO_NOTHING)
-    # warehouse = models.ForeignKey(Warehouse, on_delete=models.DO_NOTHING, related_name='warehouse')
     part = GroupedForeignKey(Part, 'warehouse')
-    # batch = GroupedForeignKey(Batch, 'supplier')
     quantity = models.IntegerField(default=0)
 
     def __str__(self):
@@ -141,25 +147,36 @@ class Component(models.Model):
         return f"{self.product.name}: {part_names}"
 
 
-# Order model on save()
-#   Based on Product and its part, update the
-
 class Order(models.Model):
     order_name = models.CharField(max_length=255, default="Order")
+    order_number = models.CharField(max_length=255, default="#")
     delivered_by = models.DateField(blank=True, null=True)
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.DO_NOTHING,
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
-        product_list = []
-        # if self.product:
-        return f"{self.order_name}"
+        return f"{self.order_name}: {self.order_number} " \
+               f"must be delivered by {self.delivered_by}"
+
+    def save(self, *args, **kwargs):
+        super(Order, self).save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        super(Order, self).delete()
 
 
 class OrderedItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, on_delete=models.DO_NOTHING)
-
-    # product = GroupedForeignKey(Product, "status")
+    product = GroupedForeignKey(Product, "warehouse")
     quantity = models.IntegerField(default=0)
+
+    def __init__(self, *args, **kwargs):
+        super(OrderedItem, self).__init__(*args, **kwargs)
+        self._initial_data = self.__dict__.copy()
 
     def __str__(self):
         product_names = []
@@ -168,3 +185,17 @@ class OrderedItem(models.Model):
             product_names.append(p_name)
         return f"{product_names} - {self.quantity}"
 
+    def save(self, *args, **kwargs):
+        changed = {
+            k: v for k, v in self._initial_data.items()
+            if v != self.__dict__[k] and k not in ('log', 'activity', '_state',)
+        }
+        if changed:
+            pass
+        #
+
+        super(OrderedItem, self).save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        # messages.add_message(request, messages.ERROR, 'Car has been sold')
+        super(OrderedItem, self).delete()
