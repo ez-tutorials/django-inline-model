@@ -1,60 +1,11 @@
 from django.db import models
 from django.contrib import messages
+from django_extensions.db.models import TimeStampedModel
 
 from smart_selects.db_fields import GroupedForeignKey, ChainedForeignKey
 
-# Create your models here.
 
-
-#
-#
-# class Group(models.Model):
-#     name = models.CharField(max_length=128)
-#     members = models.ManyToManyField(
-#         Person,
-#         through='Membership',
-#         through_fields=('group', 'person'),
-#     )
-#
-#
-# class Membership(models.Model):
-#     group = models.ForeignKey(Group, on_delete=models.CASCADE)
-#     person = models.ForeignKey(Person, on_delete=models.CASCADE)
-#     inviter = models.ForeignKey(
-#         Person,
-#         on_delete=models.CASCADE,
-#         related_name="membership_invites",
-#     )
-#     invite_reason = models.CharField(max_length=64)
-#
-#
-# class Artist(models.Model):
-#     name = models.CharField(max_length=200)
-#
-#
-# class Movie(models.Model):
-#     title = models.CharField(max_length=100)
-#     artists = models.ManyToManyField(Artist, related_name='actor')
-#
-#
-# class Role(models.Model):
-#     role_name = models.CharField(max_length=100)
-#     artist = models.ForeignKey(Artist, on_delete=models.CASCADE)
-#     movie = models.ForeignKey(Movie, on_delete=models.CASCADE)
-#
-#
-#
-#
-#
-# class Author(models.Model):
-#    name = models.CharField(max_length=100)
-#
-# class Book(models.Model):
-#    author = models.ForeignKey(Author, on_delete=models.CASCADE)
-#    title = models.CharField(max_length=100)
-
-
-class Person(models.Model):
+class Person(TimeStampedModel, models.Model):
     first_name = models.CharField(max_length=255, blank=True, null=True)
     last_name = models.CharField(max_length=255, blank=True, null=True)
     mobile = models.CharField(max_length=255, blank=True, null=True)
@@ -64,15 +15,18 @@ class Person(models.Model):
         return f"{self.first_name} {self.last_name}"
 
 
-class Status(models.Model):
+class Status(TimeStampedModel, models.Model):
     # Available, Delivered, Ordered
     name = models.CharField(max_length=255, default='Available')
 
     def __str__(self):
         return f"{self.name}"
 
+    class Meta:
+        verbose_name_plural = "Statuses"
 
-class Warehouse(models.Model):
+
+class Warehouse(TimeStampedModel, models.Model):
     name = models.CharField(max_length=255)
     address = models.CharField(max_length=255, blank=True, null=True)
 
@@ -80,7 +34,7 @@ class Warehouse(models.Model):
         return f"{self.name}"
 
 
-class Client(models.Model):
+class Client(TimeStampedModel, models.Model):
     name = models.CharField(max_length=255)
     address = models.CharField(max_length=255, blank=True, null=True)
     contact_person = models.ForeignKey(Person, on_delete=models.DO_NOTHING, blank=True, null=True)
@@ -89,7 +43,7 @@ class Client(models.Model):
         return f"{self.name}"
 
 
-class Supplier(models.Model):
+class Supplier(TimeStampedModel, models.Model):
     name = models.CharField(max_length=255)
     address = models.CharField(max_length=255, blank=True, null=True)
     contact_person = models.ForeignKey(
@@ -100,30 +54,57 @@ class Supplier(models.Model):
         return f"{self.name}"
 
 
-class Batch(models.Model):
+class Batch(TimeStampedModel, models.Model):
     number = models.CharField(max_length=255)
     manufacture_date = models.DateField()
+    manufacture_place = models.CharField(
+        max_length=255,
+        default='Cape Town, South Africa'
+    )
     expire_date = models.DateField()
     supplier = models.ForeignKey(Supplier, on_delete=models.DO_NOTHING)
 
     def __str__(self):
         return f"{self.number} from {self.supplier.name}"
 
+    class Meta:
+        verbose_name_plural = "Batches"
 
-class Product(models.Model):
+
+class Product(TimeStampedModel, models.Model):
     name = models.CharField(max_length=100)
-    default_warehouse, _ = Warehouse.objects.get_or_create(name="Cape Town")
-    warehouse = models.ForeignKey(
+    batch = models.ForeignKey(
+        Batch,
+        on_delete=models.DO_NOTHING,
+        null=True,
+        blank=True
+    )
+    packaging_warehouse = models.ForeignKey(
         Warehouse,
         on_delete=models.CASCADE,
-        default=default_warehouse.id
+        null=True,
+        blank=True
     )
+    # This is worked out from current available parts in the warehouse
+    maximum_available = models.IntegerField(default=0)
 
     def __str__(self):
-        return f"{self.name}"
+        return f"{self.name}, available max: {self.maximum_available} in {self.packaging_warehouse}"
+
+    def save(self, *args, **kwargs):
+        max_avail = 999999
+        for cp in Component.objects.filter(product=self.id):
+            if cp.part.warehouse == self.packaging_warehouse:
+                if cp.part.available_total / cp.unit_quantity < max_avail:
+                    max_avail = cp.part.available_total / cp.unit_quantity
+        if max_avail != 999999:
+            self.maximum_available = max_avail
+        else:
+            self.maximum_available = 0
+        super(Product, self).save(*args, **kwargs)
 
 
-class Part(models.Model):
+class Part(TimeStampedModel, models.Model):
     name = models.CharField(max_length=255)
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE)
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
@@ -133,11 +114,21 @@ class Part(models.Model):
         return f"{self.name} [{self.batch.number}] stored in " \
                f"{self.warehouse}, {self.available_total} available."
 
+    class Meta:
+        unique_together = [
+            'name',
+            'batch',
+            'warehouse'
+        ]
 
-class Component(models.Model):
+
+class Component(TimeStampedModel, models.Model):
     product = models.ForeignKey(Product, on_delete=models.DO_NOTHING)
     part = GroupedForeignKey(Part, 'warehouse')
-    quantity = models.IntegerField(default=0)
+    unit_quantity = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['-product__name']
 
     def __str__(self):
         part_names = []
@@ -146,8 +137,18 @@ class Component(models.Model):
             part_names.append(p_name)
         return f"{self.product.name}: {part_names}"
 
+    def save(self, *args, **kwargs):
+        # only save the component if unit_quantity is greater than 0
+        if self.unit_quantity > 0 and self.part:
+            super(Component, self).save(*args, **kwargs)
+            self.product.save()
 
-class Order(models.Model):
+    def delete(self, *args, **kwargs):
+        super(Component, self).delete()
+        self.product.save()
+
+
+class Order(TimeStampedModel, models.Model):
     order_name = models.CharField(max_length=255, default="Order")
     order_number = models.CharField(max_length=255, default="#")
     delivered_by = models.DateField(blank=True, null=True)
@@ -159,8 +160,9 @@ class Order(models.Model):
     )
 
     def __str__(self):
+        client_msg = f" to {self.client}" if self.client else ""
         return f"{self.order_name}: {self.order_number} " \
-               f"must be delivered by {self.delivered_by}"
+               f"must be delivered by {self.delivered_by}" + client_msg
 
     def save(self, *args, **kwargs):
         super(Order, self).save(*args, **kwargs)
@@ -169,9 +171,9 @@ class Order(models.Model):
         super(Order, self).delete()
 
 
-class OrderedItem(models.Model):
+class OrderedItem(TimeStampedModel, models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
-    product = GroupedForeignKey(Product, "warehouse")
+    product = GroupedForeignKey(Product, "batch")
     quantity = models.IntegerField(default=0)
 
     def __init__(self, *args, **kwargs):

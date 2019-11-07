@@ -19,17 +19,33 @@ class CustomModelAdmin(object):
 
 
 class BatchAdmin(admin.ModelAdmin):
-    pass
+    list_display = [
+        'number',
+        'manufacture_date',
+        'manufacture_place',
+        'expire_date',
+        'supplier'
+    ]
 admin.site.register(Batch, BatchAdmin)
 
 
 class SupplierAdmin(admin.ModelAdmin):
-    pass
+    list_display = ['name', 'address', 'contact_person']
+    list_filter = (
+        'name',
+        'address',
+        'contact_person',
+    )
 admin.site.register(Supplier, SupplierAdmin)
 
 
 class ClientAdmin(admin.ModelAdmin):
-    pass
+    list_display = ['name', 'address', 'contact_person']
+    list_filter = (
+        'name',
+        'address',
+        'contact_person',
+    )
 admin.site.register(Client, ClientAdmin)
 
 
@@ -44,7 +60,14 @@ admin.site.register(Person, PersonAdmin)
 
 
 class PartAdmin(admin.ModelAdmin):
-    list_display = ['name', 'batch', 'warehouse', 'available_total']
+    list_display = ['id', 'name', 'batch', 'warehouse', 'available_total']
+    list_filter = (
+        'name',
+        'batch',
+        'batch__manufacture_date',
+        'batch__manufacture_place',
+        'warehouse',
+    )
 
 admin.site.register(Part, PartAdmin)
 
@@ -54,26 +77,50 @@ class ComponentInline(admin.TabularInline):
     extra = 1
 
 
+class ComponentAdmin(admin.ModelAdmin):
+
+    list_display = ['product', 'part', 'unit_quantity']
+    list_filter = (
+        'product__name',
+    )
+
+
+admin.site.register(Component, ComponentAdmin)
+
+
 class ProductAdmin(admin.ModelAdmin):
     inlines = [
         ComponentInline,
     ]
 
-    list_display = ['name', 'warehouse']
-
+    list_display = ['name', 'batch', 'packaging_warehouse', 'maximum_available']
+    list_filter = (
+        'name',
+        'batch__number',
+        'batch__expire_date',
+        'packaging_warehouse',
+    )
+    search_fields = (
+        'name',
+        'batch__number'
+    )
 
 admin.site.register(Product, ProductAdmin)
 
 
 class WarehouseAdmin(admin.ModelAdmin):
-    pass
+    list_display = ['name', 'address']
+    list_filter = (
+        'name',
+        'address',
+    )
 
 
 admin.site.register(Warehouse, WarehouseAdmin)
 
 
 class OrderedItemAdmin(admin.ModelAdmin):
-    list_display = ['product', 'quantity']
+    list_display = ['product', 'quantity', 'order']
 
 
 admin.site.register(OrderedItem, OrderedItemAdmin)
@@ -89,22 +136,11 @@ class OrderAdmin(admin.ModelAdmin):
         OrderItemInline,
     ]
     list_display = ['order_name', 'order_number', 'client', 'delivered_by']
+    list_filter = (
+        'order_number',
+        'client',
+        'delivered_by'
+    )
 
-    # def save_formset(self, request, form, formset, change):
-    #     # formset has to be saved to get correct queryset
-    #     formset.save()
-    #     # Update part status and quantity available here
-    #     ordered_items = [f if f.quantity != 0 else f for f in formset.queryset]
-    #     for item in ordered_items:
-    #         quantity = item.quantity
-    #         product = item.product
-    #         # Update part total available quantity if all part check passes
-    #     # messages.add_message(request, messages.ERROR, 'Car has been sold')
-    #     super().save_formset(request, form, formset, change)
-    #
-    # def save_model(self, request, obj, form, change):
-    #     # Update order status
-    #     obj.user = request.user
-    #     super().save_model(request, obj, form, change)
 
 admin.site.register(Order, OrderAdmin)
