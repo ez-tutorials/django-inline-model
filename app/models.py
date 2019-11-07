@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.contrib import messages
 from django_extensions.db.models import TimeStampedModel
@@ -55,7 +56,7 @@ class Supplier(TimeStampedModel, models.Model):
 
 
 class Batch(TimeStampedModel, models.Model):
-    number = models.CharField(max_length=255)
+    number = models.UUIDField(default=str(uuid.uuid4()), unique=True)
     manufacture_date = models.DateField()
     manufacture_place = models.CharField(
         max_length=255,
@@ -73,6 +74,7 @@ class Batch(TimeStampedModel, models.Model):
 
 class Product(TimeStampedModel, models.Model):
     name = models.CharField(max_length=100)
+    product_code = models.UUIDField(default=str(uuid.uuid4()))
     batch = models.ForeignKey(
         Batch,
         on_delete=models.DO_NOTHING,
@@ -87,6 +89,12 @@ class Product(TimeStampedModel, models.Model):
     )
     # This is worked out from current available parts in the warehouse
     maximum_available = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = [
+            'product_code',
+            'batch'
+        ]
 
     def __str__(self):
         return f"{self.name}, available max: {self.maximum_available} in {self.packaging_warehouse}"
@@ -106,6 +114,7 @@ class Product(TimeStampedModel, models.Model):
 
 class Part(TimeStampedModel, models.Model):
     name = models.CharField(max_length=255)
+    part_code = models.UUIDField(default=str(uuid.uuid4()))
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE)
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
     available_total = models.IntegerField(default=0)
@@ -116,9 +125,8 @@ class Part(TimeStampedModel, models.Model):
 
     class Meta:
         unique_together = [
-            'name',
-            'batch',
-            'warehouse'
+            'part_code',
+            'batch'
         ]
 
 
@@ -150,7 +158,7 @@ class Component(TimeStampedModel, models.Model):
 
 class Order(TimeStampedModel, models.Model):
     order_name = models.CharField(max_length=255, default="Order")
-    order_number = models.CharField(max_length=255, default="#")
+    order_number = models.UUIDField(default=str(uuid.uuid4()))
     delivered_by = models.DateField(blank=True, null=True)
     client = models.ForeignKey(
         Client,
@@ -159,10 +167,16 @@ class Order(TimeStampedModel, models.Model):
         blank=True
     )
 
+    class Meta:
+        unique_together = [
+            'order_name',
+            'order_number',
+            'client'
+        ]
+
     def __str__(self):
         client_msg = f" to {self.client}" if self.client else ""
-        return f"{self.order_name}: {self.order_number} " \
-               f"must be delivered by {self.delivered_by}" + client_msg
+        return f"{self.order_name}"
 
     def save(self, *args, **kwargs):
         super(Order, self).save(*args, **kwargs)
@@ -175,6 +189,15 @@ class OrderedItem(TimeStampedModel, models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
     product = GroupedForeignKey(Product, "batch")
     quantity = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = [
+            'product__name'
+        ]
+        unique_together = [
+            'product',
+            'order'
+        ]
 
     def __init__(self, *args, **kwargs):
         super(OrderedItem, self).__init__(*args, **kwargs)
@@ -189,14 +212,12 @@ class OrderedItem(TimeStampedModel, models.Model):
 
     def save(self, *args, **kwargs):
         changed = {
-            k: v for k, v in self._initial_data.items()
+            k: self.__dict__[k] for k, v in self._initial_data.items()
             if v != self.__dict__[k] and k not in ('log', 'activity', '_state',)
         }
-        if changed:
-            pass
-        #
 
-        super(OrderedItem, self).save(*args, **kwargs)
+        if self.quantity > 0 and self.product:
+            super(OrderedItem, self).save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         # messages.add_message(request, messages.ERROR, 'Car has been sold')

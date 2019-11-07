@@ -8,6 +8,13 @@ from .models import Part, Product, Warehouse, Component, Batch, Supplier
 from .models import Person, Status, Client, Order, OrderedItem
 
 from django.contrib import admin
+from django import forms
+
+
+class InlineForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super(InlineForm, self).__init__(*args, **kwargs)
+
 
 
 class CustomModelAdmin(object):
@@ -60,12 +67,10 @@ admin.site.register(Person, PersonAdmin)
 
 
 class PartAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'batch', 'warehouse', 'available_total']
+    list_display = ['name', 'part_code', 'batch', 'warehouse', 'available_total']
     list_filter = (
         'name',
         'batch',
-        'batch__manufacture_date',
-        'batch__manufacture_place',
         'warehouse',
     )
 
@@ -93,7 +98,7 @@ class ProductAdmin(admin.ModelAdmin):
         ComponentInline,
     ]
 
-    list_display = ['name', 'batch', 'packaging_warehouse', 'maximum_available']
+    list_display = ['name', 'product_code', 'batch', 'packaging_warehouse', 'maximum_available']
     list_filter = (
         'name',
         'batch__number',
@@ -121,6 +126,11 @@ admin.site.register(Warehouse, WarehouseAdmin)
 
 class OrderedItemAdmin(admin.ModelAdmin):
     list_display = ['product', 'quantity', 'order']
+    list_filter = (
+        'order__order_name',
+        'product__name',
+        'order__client'
+    )
 
 
 admin.site.register(OrderedItem, OrderedItemAdmin)
@@ -129,6 +139,13 @@ admin.site.register(OrderedItem, OrderedItemAdmin)
 class OrderItemInline(admin.TabularInline):
     model = OrderedItem
     extra = 1
+    # form = InlineForm
+
+    # def get_formset(self, request, obj=None, **kwargs):
+    #     InlineForm.obj = obj
+    #     return super(OrderItemInline, self).get_formset(request, obj, **kwargs)
+
+        # return formset
 
 
 class OrderAdmin(admin.ModelAdmin):
@@ -141,6 +158,35 @@ class OrderAdmin(admin.ModelAdmin):
         'client',
         'delivered_by'
     )
+
+    def save_formset(self, request, form, formset, change):
+        parts_needed = {}
+        for item in formset:
+            if item.instance.product_id:
+                ordered_product = item.instance.product
+                ordered_quantity = item.instance.quantity
+                for comp in Component.objects.filter(product=ordered_product):
+                    if comp.part not in parts_needed:
+                        parts_needed.update(
+                            {
+                                comp.part: ordered_quantity * comp.unit_quantity
+                            }
+                        )
+                    else:
+                        parts_needed[comp.part] += ordered_quantity * comp.unit_quantity
+        submit_order = True
+        for part, total_quantity_needed in parts_needed.items():
+            if part.available_total < total_quantity_needed:
+                messages.add_message(
+                    request,
+                    messages.WARNING,
+                    f"Part: [{part.name} - {part.batch.number}] short: {total_quantity_needed - part.available_total}"
+                )
+                submit_order = False
+        # if submit_order:
+        return super().save_formset(request, form, formset, change)
+
+
 
 
 admin.site.register(Order, OrderAdmin)
