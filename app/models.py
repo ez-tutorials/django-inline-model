@@ -56,7 +56,7 @@ class Supplier(TimeStampedModel, models.Model):
 
 
 class Batch(TimeStampedModel, models.Model):
-    number = models.UUIDField(default=str(uuid.uuid4()), unique=True)
+    number = models.UUIDField(default=uuid.uuid4, unique=True)
     manufacture_date = models.DateField()
     manufacture_place = models.CharField(
         max_length=255,
