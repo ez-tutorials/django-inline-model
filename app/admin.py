@@ -33,6 +33,20 @@ class BatchAdmin(admin.ModelAdmin):
         'expire_date',
         'supplier'
     ]
+    list_filter = (
+        'number',
+        'manufacture_date',
+        'manufacture_place',
+        'expire_date',
+        'supplier__name'
+    )
+    search_fields = (
+        'number',
+        'manufacture_date',
+        'manufacture_place',
+        'expire_date',
+        'supplier__name'
+    )
 admin.site.register(Batch, BatchAdmin)
 
 
@@ -42,6 +56,10 @@ class SupplierAdmin(admin.ModelAdmin):
         'name',
         'address',
         'contact_person',
+    )
+    search_fields = (
+        'name',
+        'address',
     )
 admin.site.register(Supplier, SupplierAdmin)
 
@@ -72,6 +90,12 @@ class PartAdmin(admin.ModelAdmin):
         'name',
         'batch',
         'warehouse',
+    )
+    search_fields = (
+        'name',
+        'part_code',
+        'batch__number',
+        'warehouse__name',
     )
 
 admin.site.register(Part, PartAdmin)
@@ -107,6 +131,8 @@ class ProductAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'name',
+        'product_code',
+        'packaging_warehouse__name',
         'batch__number'
     )
 

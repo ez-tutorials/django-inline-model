@@ -56,7 +56,11 @@ class Supplier(TimeStampedModel, models.Model):
 
 
 class Batch(TimeStampedModel, models.Model):
-    number = models.UUIDField(default=uuid.uuid4, unique=True)
+    number = models.CharField(
+        max_length=255,
+        default=None,
+        editable=False
+    )
     manufacture_date = models.DateField()
     manufacture_place = models.CharField(
         max_length=255,
@@ -66,15 +70,24 @@ class Batch(TimeStampedModel, models.Model):
     supplier = models.ForeignKey(Supplier, on_delete=models.DO_NOTHING)
 
     def __str__(self):
-        return f"{self.number} from {self.supplier.name}"
+        return f"Batch: [{self.number}] from {self.supplier.name}"
 
     class Meta:
         verbose_name_plural = "Batches"
 
+    def save(self, *args, **kwargs):
+        if not self.number:
+            self.number = str(uuid.uuid4())
+        super(Batch, self).save(*args, **kwargs)
+
 
 class Product(TimeStampedModel, models.Model):
     name = models.CharField(max_length=100)
-    product_code = models.UUIDField(default=str(uuid.uuid4()))
+    product_code = models.CharField(
+        max_length=255,
+        default=None,
+        editable=False
+    )
     batch = models.ForeignKey(
         Batch,
         on_delete=models.DO_NOTHING,
@@ -88,7 +101,7 @@ class Product(TimeStampedModel, models.Model):
         blank=True
     )
     # This is worked out from current available parts in the warehouse
-    maximum_available = models.IntegerField(default=0)
+    maximum_available = models.IntegerField(default=0, editable=False)
 
     class Meta:
         unique_together = [
@@ -109,12 +122,20 @@ class Product(TimeStampedModel, models.Model):
             self.maximum_available = max_avail
         else:
             self.maximum_available = 0
+
+        # Create product_code
+        if not self.product_code:
+            self.product_code = str(uuid.uuid4())
         super(Product, self).save(*args, **kwargs)
 
 
 class Part(TimeStampedModel, models.Model):
     name = models.CharField(max_length=255)
-    part_code = models.UUIDField(default=str(uuid.uuid4()))
+    part_code = models.CharField(
+        max_length=255,
+        default=None,
+        editable=False
+    )
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE)
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
     available_total = models.IntegerField(default=0)
@@ -123,11 +144,17 @@ class Part(TimeStampedModel, models.Model):
         return f"{self.name} [{self.batch.number}] stored in " \
                f"{self.warehouse}, {self.available_total} available."
 
+    def save(self, *args, **kwargs):
+        if not self.part_code:
+            self.part_code = str(uuid.uuid4())
+        super(Part, self).save(*args, **kwargs)
+
     class Meta:
         unique_together = [
             'part_code',
             'batch'
         ]
+
 
 
 class Component(TimeStampedModel, models.Model):
@@ -158,7 +185,11 @@ class Component(TimeStampedModel, models.Model):
 
 class Order(TimeStampedModel, models.Model):
     order_name = models.CharField(max_length=255, default="Order")
-    order_number = models.UUIDField(default=str(uuid.uuid4()))
+    order_number = models.CharField(
+        default=str(uuid.uuid4),
+        editable=False,
+        max_length=255
+    )
     delivered_by = models.DateField(blank=True, null=True)
     client = models.ForeignKey(
         Client,
