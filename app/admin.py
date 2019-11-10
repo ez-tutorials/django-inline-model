@@ -151,11 +151,18 @@ admin.site.register(Warehouse, WarehouseAdmin)
 
 
 class OrderedItemAdmin(admin.ModelAdmin):
-    list_display = ['product', 'quantity', 'order']
+    list_display = ['order', 'status', 'product', 'quantity']
     list_filter = (
         'order__order_name',
+        'product',
+        'order__client',
+        'status',
+    )
+    search_fields = (
+        'order__order_name',
         'product__name',
-        'order__client'
+        'order__client',
+        'status__name',
     )
 
 
@@ -178,14 +185,16 @@ class OrderAdmin(admin.ModelAdmin):
     inlines = [
         OrderItemInline,
     ]
-    list_display = ['order_name', 'order_number', 'client', 'delivered_by']
+    list_display = ['order_name', 'order_number', 'status', 'client', 'delivered_by']
     list_filter = (
+        'status',
         'order_number',
         'client',
         'delivered_by'
     )
 
     def save_formset(self, request, form, formset, change):
+        order = formset.instance
         parts_needed = {}
         for item in formset:
             if item.instance.product_id:
@@ -201,15 +210,40 @@ class OrderAdmin(admin.ModelAdmin):
                     else:
                         parts_needed[comp.part] += ordered_quantity * comp.unit_quantity
         submit_order = True
+        msgs = []
         for part, total_quantity_needed in parts_needed.items():
             if part.available_total < total_quantity_needed:
-                messages.add_message(
-                    request,
-                    messages.WARNING,
+                msgs.append(
                     f"Part: [{part.name} - {part.batch.number}] short: {total_quantity_needed - part.available_total}"
                 )
                 submit_order = False
-        # if submit_order:
+        if submit_order:
+            messages.info(
+                request,
+                f"{formset.instance.order_name} - [{formset.instance.order_number}] has been submittted."
+            )
+            submitted, _ = Status.objects.get_or_create(name="Submitted")
+            if order.status.name != submitted.name:
+                Order.objects.filter(order_number=order.order_number).update(status=submitted)
+                for part, total_quantity_needed in parts_needed.items():
+                    part.available_total -= total_quantity_needed
+                    part.save()
+                    for component in Component.objects.filter(part=part):
+                        component.product.save()
+        else:
+            created, _ = Status.objects.get_or_create(name="Created")
+            Order.objects.filter(order_number=order.order_number).update(status=created)
+            messages.warning(request, f"Unable to submit order: [{formset.instance.order_number}]")
+            for msg in msgs:
+                messages.warning(request, msg)
+
+        # Revert an order
+        if order.status.name == "Cancelled":
+            for part, total_quantity_needed in parts_needed.items():
+                part.available_total += total_quantity_needed
+                part.save()
+
+
         return super().save_formset(request, form, formset, change)
 
 

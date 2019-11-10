@@ -145,16 +145,19 @@ class Part(TimeStampedModel, models.Model):
                f"{self.warehouse}, {self.available_total} available."
 
     def save(self, *args, **kwargs):
+        # Set part_code
         if not self.part_code:
             self.part_code = str(uuid.uuid4())
         super(Part, self).save(*args, **kwargs)
+        # Update product
+        for component in Component.objects.filter(part__id=self.id):
+            component.product.save()
 
     class Meta:
         unique_together = [
             'part_code',
             'batch'
         ]
-
 
 
 class Component(TimeStampedModel, models.Model):
@@ -197,6 +200,13 @@ class Order(TimeStampedModel, models.Model):
         null=True,
         blank=True
     )
+    status = models.ForeignKey(
+        Status,
+        on_delete=models.DO_NOTHING,
+        null=True,
+        blank=True,
+        editable=False
+    )
 
     class Meta:
         unique_together = [
@@ -210,6 +220,15 @@ class Order(TimeStampedModel, models.Model):
         return f"{self.order_name}"
 
     def save(self, *args, **kwargs):
+        # Update Order Item Status
+        for oi in OrderedItem.objects.filter(order__id=self.id):
+            if oi.status != self.status:
+                oi.status = self.status
+                oi.save()
+
+        # Create order_number
+        if not self.order_number:
+            self.order_number = str(uuid.uuid4())
         super(Order, self).save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -218,6 +237,13 @@ class Order(TimeStampedModel, models.Model):
 
 class OrderedItem(TimeStampedModel, models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
+    status = models.ForeignKey(
+        Status,
+        on_delete=models.DO_NOTHING,
+        null=True,
+        blank=True,
+        editable=False
+    )
     product = GroupedForeignKey(Product, "batch")
     quantity = models.IntegerField(default=0)
 
