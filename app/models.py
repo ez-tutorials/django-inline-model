@@ -116,8 +116,8 @@ class Product(TimeStampedModel, models.Model):
         max_avail = 999999
         for cp in Component.objects.filter(product=self.id):
             if cp.part.warehouse == self.packaging_warehouse:
-                if cp.part.available_total / cp.unit_quantity < max_avail:
-                    max_avail = cp.part.available_total / cp.unit_quantity
+                if cp.part.available / cp.unit_quantity < max_avail:
+                    max_avail = cp.part.available / cp.unit_quantity
         if max_avail != 999999:
             self.maximum_available = max_avail
         else:
@@ -138,11 +138,12 @@ class Part(TimeStampedModel, models.Model):
     )
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE)
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
-    available_total = models.IntegerField(default=0)
+    available = models.IntegerField(default=0)
+    total = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.name} [{self.batch.number}] stored in " \
-               f"{self.warehouse}, {self.available_total} available."
+               f"{self.warehouse}, {self.available} available."
 
     def save(self, *args, **kwargs):
         # Set part_code
@@ -205,7 +206,6 @@ class Order(TimeStampedModel, models.Model):
         on_delete=models.DO_NOTHING,
         null=True,
         blank=True,
-        editable=False
     )
 
     class Meta:
@@ -220,16 +220,15 @@ class Order(TimeStampedModel, models.Model):
         return f"{self.order_name}"
 
     def save(self, *args, **kwargs):
-        # Update Order Item Status
-        for oi in OrderedItem.objects.filter(order__id=self.id):
-            if oi.status != self.status:
-                oi.status = self.status
-                oi.save()
 
         # Create order_number
         if not self.order_number:
             self.order_number = str(uuid.uuid4())
         super(Order, self).save(*args, **kwargs)
+        # Update Order Item Status
+        for oi in OrderedItem.objects.filter(order__id=self.id):
+            oi.status = self.status
+            oi.save()
 
     def delete(self, *args, **kwargs):
         super(Order, self).delete()
@@ -268,14 +267,60 @@ class OrderedItem(TimeStampedModel, models.Model):
         return f"{product_names} - {self.quantity}"
 
     def save(self, *args, **kwargs):
-        changed = {
-            k: self.__dict__[k] for k, v in self._initial_data.items()
-            if v != self.__dict__[k] and k not in ('log', 'activity', '_state',)
-        }
-
+        # changed = {
+            # k: self.__dict__[k] for k, v in self._initial_data.items()
+            # if v != self.__dict__[k] and k not in ('log', 'activity', '_state',)
+        # }
         if self.quantity > 0 and self.product:
+            # super(OrderedItem, self).save(*args, **kwargs)
+            if self.status and self.status.name == "Submitted":
+                # Create OrderedPart if they don't exist
+                for comp in Component.objects.filter(product=self.product):
+                    ordered_part, created = PartOrdered.objects.get_or_create(part=comp.part, ordered_item_id=self.id)
+                    if created:
+                        ordered_part.quantity = self.quantity * comp.unit_quantity
+                        ordered_part.save()
+                    else:
+                        if ordered_part.quantity != self.quantity * comp.unit_quantity:
+                            ordered_part.quantity = self.quantity * comp.unit_quantity
+                            ordered_part.save()
             super(OrderedItem, self).save(*args, **kwargs)
+            # ordered item status is Submitted
+            #   check how many parts have been marked with the order,
+            #   status
+            #   create the rest of parts with order, status(ordered), quantity
+            # ordered item status is Cancelled
+            #   remove all parts marked with this order and restore the
+            #   quantity
 
     def delete(self, *args, **kwargs):
-        # messages.add_message(request, messages.ERROR, 'Car has been sold')
         super(OrderedItem, self).delete()
+        # Revert ordered item if its status is submitted.
+
+
+class PartOrdered(TimeStampedModel, models.Model):
+    part = models.ForeignKey(
+        Part,
+        on_delete=models.DO_NOTHING,
+        blank=True,
+        null=True)
+
+    ordered_item = models.ForeignKey(OrderedItem, on_delete=models.CASCADE)
+    quantity = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.part.name} was order [{self.quantity}]."
+
+    def save(self, *args, **kwargs):
+        super(PartOrdered, self).save(*args, **kwargs)
+        # Update available quantity of Part
+        part = Part.objects.get(id=self.part.id)
+        part.available = part.total - self.quantity
+        part.save()
+
+    class Meta:
+        unique_together = [
+            'part',
+            'ordered_item'
+        ]
+#

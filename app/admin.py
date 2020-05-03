@@ -5,16 +5,15 @@ from django.contrib import messages
 # from .models import Role, Movie, Artist
 # from .models import Book, Author
 from .models import Part, Product, Warehouse, Component, Batch, Supplier
-from .models import Person, Status, Client, Order, OrderedItem
+from .models import Person, Status, Client, Order, OrderedItem, PartOrdered
 
 from django.contrib import admin
-from django import forms
+from .forms import *
 
 
 class InlineForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super(InlineForm, self).__init__(*args, **kwargs)
-
 
 
 class CustomModelAdmin(object):
@@ -47,6 +46,16 @@ class BatchAdmin(admin.ModelAdmin):
         'expire_date',
         'supplier__name'
     )
+   #  This is for arrange how fields are displayed in admin page
+   #  fieldsets = (
+        # ('Company', {
+        #     'fields': ('company',),
+        # }),
+        # ('Partner Service', {
+        #     'fields': ('vendor_id', 'name', 'max_app_limit'),
+        # }),
+   #  )
+
 admin.site.register(Batch, BatchAdmin)
 
 
@@ -61,6 +70,7 @@ class SupplierAdmin(admin.ModelAdmin):
         'name',
         'address',
     )
+    form = SupplierAdminForm
 admin.site.register(Supplier, SupplierAdmin)
 
 
@@ -85,7 +95,7 @@ admin.site.register(Person, PersonAdmin)
 
 
 class PartAdmin(admin.ModelAdmin):
-    list_display = ['name', 'part_code', 'batch', 'warehouse', 'available_total']
+    list_display = ['name', 'part_code', 'batch', 'warehouse', 'available', 'total']
     list_filter = (
         'name',
         'batch',
@@ -103,24 +113,26 @@ admin.site.register(Part, PartAdmin)
 
 class ComponentInline(admin.TabularInline):
     model = Component
+    # form = ComponentAdminForm
+    formset = ComponentInlineFormset
     extra = 1
 
 
-class ComponentAdmin(admin.ModelAdmin):
-
-    list_display = ['product', 'part', 'unit_quantity']
-    list_filter = (
-        'product__name',
-    )
-
-
-admin.site.register(Component, ComponentAdmin)
+# class ComponentAdmin(admin.ModelAdmin):
+#
+#     list_display = ['product', 'part', 'unit_quantity']
+#     list_filter = (
+#         'product__name',
+#     )
+# admin.site.register(Component, ComponentAdmin)
 
 
 class ProductAdmin(admin.ModelAdmin):
     inlines = [
         ComponentInline,
     ]
+
+    form = ProductAdminForm
 
     list_display = ['name', 'product_code', 'batch', 'packaging_warehouse', 'maximum_available']
     list_filter = (
@@ -136,6 +148,7 @@ class ProductAdmin(admin.ModelAdmin):
         'batch__number'
     )
 
+
 admin.site.register(Product, ProductAdmin)
 
 
@@ -148,6 +161,18 @@ class WarehouseAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Warehouse, WarehouseAdmin)
+
+
+class PartOrderedAdmin(admin.ModelAdmin):
+    list_display = ['part', 'ordered_item', 'quantity']
+    list_filter = (
+        'part',
+        'ordered_item',
+    )
+    readonly_fields = ['part', 'ordered_item', 'quantity']
+
+
+admin.site.register(PartOrdered, PartOrderedAdmin)
 
 
 class OrderedItemAdmin(admin.ModelAdmin):
@@ -172,7 +197,10 @@ admin.site.register(OrderedItem, OrderedItemAdmin)
 class OrderItemInline(admin.TabularInline):
     model = OrderedItem
     extra = 1
+    fields = ['product', 'status', 'quantity']
+    readonly_fields = ['status']
     # form = InlineForm
+
 
     # def get_formset(self, request, obj=None, **kwargs):
     #     InlineForm.obj = obj
@@ -192,9 +220,14 @@ class OrderAdmin(admin.ModelAdmin):
         'client',
         'delivered_by'
     )
+    # readonly_fields = ["status"]
 
     def save_formset(self, request, form, formset, change):
-        order = formset.instance
+        create_status, _ = Status.objects.get_or_create(name="Created")
+        order = Order.objects.get(order_number=formset.instance.order_number)
+        if not order.status:
+            formset.instance.status = create_status
+
         parts_needed = {}
         for item in formset:
             if item.instance.product_id:
@@ -212,39 +245,37 @@ class OrderAdmin(admin.ModelAdmin):
         submit_order = True
         msgs = []
         for part, total_quantity_needed in parts_needed.items():
-            if part.available_total < total_quantity_needed:
+            if part.available < total_quantity_needed != 0:
                 msgs.append(
-                    f"Part: [{part.name} - {part.batch.number}] short: {total_quantity_needed - part.available_total}"
-                )
+                    f"Part name: [{part.name}, batch: {part.batch.number}] short: {total_quantity_needed - part.available} in {part.warehouse.name}")
                 submit_order = False
         if submit_order:
             messages.info(
                 request,
                 f"{formset.instance.order_name} - [{formset.instance.order_number}] has been submittted."
             )
-            submitted, _ = Status.objects.get_or_create(name="Submitted")
-            if order.status.name != submitted.name:
-                Order.objects.filter(order_number=order.order_number).update(status=submitted)
-                for part, total_quantity_needed in parts_needed.items():
-                    part.available_total -= total_quantity_needed
-                    part.save()
-                    for component in Component.objects.filter(part=part):
-                        component.product.save()
+            # submitted, _ = Status.objects.get_or_create(name="Submitted")
+            # if order.status.name != submitted.name:
+            #     Order.objects.filter(order_number=order.order_number).update(status=submitted)
+            #     for part, total_quantity_needed in parts_needed.items():
+            #         part.available -= total_quantity_needed
+            #         part.save()
+            #         for component in Component.objects.filter(part=part):
+            #             component.product.save()
         else:
-            created, _ = Status.objects.get_or_create(name="Created")
-            Order.objects.filter(order_number=order.order_number).update(status=created)
+            order.status = create_status
+            order.save()
             messages.warning(request, f"Unable to submit order: [{formset.instance.order_number}]")
             for msg in msgs:
                 messages.warning(request, msg)
 
-        # Revert an order
-        if order.status.name == "Cancelled":
-            for part, total_quantity_needed in parts_needed.items():
-                part.available_total += total_quantity_needed
-                part.save()
-
-
         return super().save_formset(request, form, formset, change)
+        # Revert an order
+        # if order.status.name == "Cancelled":
+            # for part, total_quantity_needed in parts_needed.items():
+            #     part.available += total_quantity_needed
+            #     part.save()
+
 
 
 
