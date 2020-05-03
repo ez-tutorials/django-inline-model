@@ -1,7 +1,7 @@
 apt-clone==0.2.1
 apturl==0.5.2
 beautifulsoup4==4.6.0
-bleach==2.1.2
+bleach==3.1.4
 Brlapi==0.6.6
 catfish==1.4.10
 certifi==2018.1.18
