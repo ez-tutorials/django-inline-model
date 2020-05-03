@@ -81,7 +81,7 @@ tornado==4.5.3
 traitlets==4.3.2
 ubuntu-drivers-common==0.0.0
 ufw==0.36
-urllib3==1.22
+urllib3==1.24.2
 vboxapi==1.0
 virtualenv==15.1.0
 wcwidth==0.1.7
