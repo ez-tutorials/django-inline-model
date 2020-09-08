@@ -48,11 +48,6 @@ class ProductAdminForm(forms.ModelForm):
         exclude = []
 
 
-class ComponentInlineFormset(forms.BaseInlineFormSet):
-    def save_new(self, form, commit=True):
-        return super(ComponentInlineFormset, self).save_new(form, commit=commit)
 
-    def save_existing(self, form, instance, commit=True):
-        return form.save(commit=commit)
 
     # def cleaned_data(self):

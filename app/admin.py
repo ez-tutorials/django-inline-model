@@ -114,7 +114,7 @@ admin.site.register(Part, PartAdmin)
 class ComponentInline(admin.TabularInline):
     model = Component
     # form = ComponentAdminForm
-    formset = ComponentInlineFormset
+    # formset = ComponentInlineFormset
     extra = 1
 
 
